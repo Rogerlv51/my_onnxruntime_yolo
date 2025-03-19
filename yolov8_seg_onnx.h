@@ -4,7 +4,6 @@
 #include <opencv2/opencv.hpp>
 #include<onnxruntime_cxx_api.h>
 #include <tensorrt_provider_factory.h> 
-#include<iostream>
 #include <numeric>
 #include<io.h>
 
