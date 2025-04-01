@@ -4,7 +4,9 @@
 #include <opencv2/opencv.hpp>
 #include<onnxruntime_cxx_api.h>
 #include <tensorrt_provider_factory.h> 
+#include<iostream>
 #include <numeric>
+#include<opencv2/opencv.hpp>
 #include<io.h>
 
 struct OutputSeg {
@@ -31,7 +33,7 @@ public:
 	~Yolov8SegOnnx() {};
 
 	bool ReadModel(const std::string& modelPath, bool isCuda = false, int cudaID = 0, bool warmUp = false);//读模型
-	bool OnnxDetect(const cv::Mat& srcImg, std::vector<OutputSeg>& output);//图片推理过程
+	bool OnnxDetect(cv::Mat& srcImg, std::vector<OutputSeg>& output);//图片推理过程
 	void DrawPred(cv::Mat& img, cv::Mat* outImage, std::vector<OutputSeg> result, std::vector<std::string> classNames);//画图，显示
 	std::vector<std::string> _className = {
 		"box"
@@ -63,6 +65,17 @@ public:
 		int stride = 32,
 		const cv::Scalar& color = cv::Scalar(114, 114, 114));
 	void GetMask2(const cv::Mat& maskProposals, const cv::Mat& maskProtos, OutputSeg& output, const MaskParams& maskParams);
+
+	// 计算两个二值 mask 的 IoU，mask 中仅包含 0 和 255
+	double computeIoU(const cv::Mat& mask1, const cv::Mat& mask2);
+	// 并查集查找函数（带路径压缩）
+	int findParent(int i, std::vector<int>& parent);
+	// 并查集合并操作
+	void unionSets(int i, int j, std::vector<int>& parent);
+	// 遍历所有 mask，两两比较，如果 IoU 超过阈值，则将它们合并到同一组中，最后返回不同组的数量
+	int reComputeInstances(std::vector<cv::Mat>& masks, float iouThreshold);
+	// 需要将mask都转到图像坐标系，再进行比较
+	int compMaskAndInstances(std::vector<OutputSeg>& result, float iouThreshold);
 
 	//ONNXRUNTIME	
 	Ort::Env _OrtEnv = Ort::Env(OrtLoggingLevel::ORT_LOGGING_LEVEL_ERROR, "Yolov8-Seg");
