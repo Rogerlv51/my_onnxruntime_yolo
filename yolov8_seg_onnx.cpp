@@ -88,8 +88,11 @@ bool Yolov8SegOnnx::ReadModel(const std::string& modelPath, bool isCuda, int cud
 	if (_batchSize < 1) _batchSize = 1;
 	try
 	{
-		if (!CheckModelPath(modelPath))
+		if (!CheckModelPath(modelPath)) {
+			cout << "Path Error" << endl;
 			return false;
+		}
+			
 		std::vector<std::string> available_providers = GetAvailableProviders();
 		auto cuda_available = std::find(available_providers.begin(), available_providers.end(), "CUDAExecutionProvider");
 
@@ -101,8 +104,7 @@ bool Yolov8SegOnnx::ReadModel(const std::string& modelPath, bool isCuda, int cud
 		else if (isCuda && (cuda_available != available_providers.end()))
 		{
 			std::cout << "************* Infer model on GPU! *************" << std::endl;
-			// 注意：如果是cpu版本的onnxruntime无法使用这个接口
-			// OrtStatus* status = OrtSessionOptionsAppendExecutionProvider_CUDA(_OrtSessionOptions, cudaID);
+			//OrtStatus* status = OrtSessionOptionsAppendExecutionProvider_CUDA(_OrtSessionOptions, cudaID);
 		}
 		else
 		{
@@ -195,6 +197,7 @@ bool Yolov8SegOnnx::ReadModel(const std::string& modelPath, bool isCuda, int cud
 			}
 
 			delete[]temp;
+			
 		}
 	}
 	catch (const std::exception&) {
@@ -234,7 +237,7 @@ int Yolov8SegOnnx::Preprocessing(const std::vector<cv::Mat>& srcImgs, std::vecto
 	return 0;
 
 }
-bool Yolov8SegOnnx::OnnxDetect(const cv::Mat& srcImg, std::vector<OutputSeg>& output) {
+bool Yolov8SegOnnx::OnnxDetect(cv::Mat& srcImg, std::vector<OutputSeg>& output) {
 	std::vector<cv::Mat> input_data = { srcImg };
 	std::vector<std::vector<OutputSeg>> tenp_output;
 	if (OnnxBatchDetect(input_data, tenp_output)) {
@@ -272,7 +275,7 @@ bool Yolov8SegOnnx::OnnxBatchDetect(std::vector<cv::Mat>& srcImgs, std::vector<s
 	int mask_protos_length = VectorProduct(mask_protos_shape);
 	int64_t one_output_length = VectorProduct(_outputTensorShape) / _outputTensorShape[0];
 	int net_width = (int)_outputTensorShape[1];
-	//cout << "all_data: " << dec << all_data << " _outputTensorShape: " << _outputTensorShape[1] << "," << _outputTensorShape[2] << " mask_protos_length: " << mask_protos_length << " one_output_length: " << one_output_length << endl;
+	cout << "all_data: " << dec << all_data << " _outputTensorShape: " << _outputTensorShape[1] << "," << _outputTensorShape[2] << " mask_protos_length: " << mask_protos_length << " one_output_length: " << one_output_length << endl;
 
 	for (int img_index = 0; img_index < srcImgs.size(); ++img_index) {
 		Mat output0 = Mat(Size((int)_outputTensorShape[2], (int)_outputTensorShape[1]), CV_32F, all_data).t();  //[bs,116,8400]=>[bs,8400,116]
@@ -408,15 +411,96 @@ void Yolov8SegOnnx::GetMask2(const Mat& maskProposals, const Mat& maskProtos, Ou
 void Yolov8SegOnnx::DrawPred(Mat& img, Mat* outImage, vector<OutputSeg> result, std::vector<std::string> classNames) {
 	Mat img_black;
 	img_black = cv::Mat::zeros(img.size(), img.type());
-	Mat mask = img_black.clone();
-	//Mat mask = img.clone();//将原图clone过来
-	for (int i = 0; i < result.size(); i++) {
-		if (result[i].boxMask.rows&& result[i].boxMask.cols > 0)
-			mask(result[i].box).setTo(Scalar(255, 255, 255), result[i].boxMask);//将推理得到的结果（boxMask）在mask图像（原图）中的特定位置显示出来（转成绿色）
+	//Mat mask = img_black.clone();
+	Mat mask = img.clone();//将原图clone过来
+
+	// 设置随机种子（只需在程序初始化时执行一次）
+	static bool seed_set = false;
+	if (!seed_set) {
+		srand(time(0)); // 确保每次运行颜色不同[1](@ref)
+		seed_set = true;
 	}
-	//addWeighted(img, 0.5, mask, 0.5, 0, img); //add mask to src
+
+	for (int i = 0; i < result.size(); i++) {
+		if (result[i].boxMask.rows && result[i].boxMask.cols > 0) {
+			Scalar random_color(rand() % 256, rand() % 256, rand() % 256); // [1,4,6](@ref)
+			mask(result[i].box).setTo(random_color, result[i].boxMask);//将推理得到的结果（boxMask）在mask图像（原图）中的特定位置显示出来
+		}
+			
+	}
+	addWeighted(img, 0.5, mask, 0.5, 0, img); //add mask to src
 
 	*outImage = mask;
 	//destroyAllWindows();
 
+}
+
+double Yolov8SegOnnx::computeIoU(const cv::Mat& mask1, const cv::Mat& mask2) {
+	cv::Mat intersection, unionMat;
+	// 求交集：两个 mask 都为1的位置
+	cv::bitwise_and(mask1, mask2, intersection);
+	// 求并集：两个 mask 中有1的位置
+	cv::bitwise_or(mask1, mask2, unionMat);
+
+	double inter = static_cast<double>(cv::countNonZero(intersection));
+	double uni = static_cast<double>(cv::countNonZero(unionMat));
+	return uni > 0 ? inter / uni : 0.0;
+}
+
+int Yolov8SegOnnx::findParent(int i, std::vector<int>& parent) {
+	if (parent[i] != i) {
+		parent[i] = findParent(parent[i], parent);
+	}
+	return parent[i];
+}
+
+void Yolov8SegOnnx::unionSets(int i, int j, std::vector<int>& parent) {
+	int rootI = findParent(i, parent);
+	int rootJ = findParent(j, parent);
+	if (rootI != rootJ) {
+		parent[rootJ] = rootI;
+	}
+}
+
+int Yolov8SegOnnx::reComputeInstances(std::vector<cv::Mat>& masks, float iouThreshold) {
+	int n = masks.size();
+	if (n == 0) return 0;
+
+	// 初始化并查集
+	std::vector<int> parent(n);
+	for (int i = 0; i < n; i++) {
+		parent[i] = i;
+	}
+
+	// 遍历 mask 对，每对只计算一次
+	for (int i = 0; i < n; i++) {
+		for (int j = i + 1; j < n; j++) {
+			double iou = computeIoU(masks[i], masks[j]);
+			if (iou > iouThreshold) {
+				unionSets(i, j, parent);
+			}
+		}
+	}
+
+	// 统计不同的父节点，即代表不同的实例
+	std::set<int> clusters;
+	for (int i = 0; i < n; i++) {
+		clusters.insert(findParent(i, parent));
+	}
+	return clusters.size();
+}
+
+int Yolov8SegOnnx::compMaskAndInstances(std::vector<OutputSeg>& result, float iouThreshold) {
+	std::vector<cv::Mat> masks;
+
+	for (int i = 0; i < result.size(); i++) {
+		if (result[i].boxMask.rows > 0 && result[i].boxMask.cols > 0) {
+			cv::Mat img_black = cv::Mat::zeros(1080, 1920, CV_8UC1);
+			// 将 mask 按照对应的 box 放到原图尺寸中
+			img_black(result[i].box).setTo(255, result[i].boxMask);
+			masks.push_back(img_black);
+		}
+	}
+	int count = reComputeInstances(masks, iouThreshold);
+	return count;
 }
