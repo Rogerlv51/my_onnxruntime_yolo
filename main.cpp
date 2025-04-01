@@ -3,10 +3,10 @@
 using namespace cv;
 
 int main() {
-	Yolov8SegOnnx cengshu_model;
-	cengshu_model.ReadModel("line1_cengshu.onnx");
-	cengshu_model._classThreshold = 0.78;
-	cengshu_model._nmsThreshold = 0.85;
+    Yolov8SegOnnx cengshu_model;
+    cengshu_model.ReadModel("line1_cengshu.onnx");
+    cengshu_model._classThreshold = 0.78;
+    cengshu_model._nmsThreshold = 0.85;
     cengshu_model._maskThreshold = 0.7;
 
     std::string pattern2 = "C:/Users/Administrator/Desktop/行李实例分割/ultralytics-main/datasets/line1/images/*.jpg";
