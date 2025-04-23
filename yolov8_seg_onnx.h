@@ -35,6 +35,8 @@ public:
 	bool ReadModel(const std::string& modelPath, bool isCuda = false, int cudaID = 0, bool warmUp = false);//读模型
 	bool OnnxDetect(cv::Mat& srcImg, std::vector<OutputSeg>& output);//图片推理过程
 	void DrawPred(cv::Mat& img, cv::Mat* outImage, std::vector<OutputSeg> result, std::vector<std::string> classNames);//画图，显示
+	// 做前景分割提取用
+	void DrawPred2(cv::Mat& img, cv::Mat* outImage, std::vector<OutputSeg> result, std::vector<std::string> classNames);
 	std::vector<std::string> _className = {
 		"box"
 	};//类别名称,需要根据实际修改
