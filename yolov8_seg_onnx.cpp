@@ -435,6 +435,28 @@ void Yolov8SegOnnx::DrawPred(Mat& img, Mat* outImage, vector<OutputSeg> result, 
 
 }
 
+// 做前景分割提取用
+void Yolov8SegOnnx::DrawPred2(Mat& img, Mat* outImage, vector<OutputSeg> result, std::vector<std::string> classNames) {
+	// 创建全黑背景图（与原图尺寸、通道数相同）
+	Mat black_bg = Mat::zeros(img.size(), img.type());
+
+	std::vector<cv::Mat> masks;
+
+	for (int i = 0; i < result.size(); i++) {
+		if (result[i].boxMask.rows > 0 && result[i].boxMask.cols > 0) {
+			cv::Mat img_black = cv::Mat::zeros(1080, 1920, CV_8UC1);
+			// 将 mask 按照对应的 box 放到原图尺寸中
+			img_black(result[i].box).setTo(255, result[i].boxMask);
+			masks.push_back(img_black);
+		}
+	}
+	for (auto ms : masks) {
+		img.copyTo(black_bg, ms);
+	}
+
+	*outImage = black_bg.clone();
+}
+
 double Yolov8SegOnnx::computeIoU(const cv::Mat& mask1, const cv::Mat& mask2) {
 	cv::Mat intersection, unionMat;
 	// 求交集：两个 mask 都为1的位置
